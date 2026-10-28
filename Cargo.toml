@@ -1,0 +1,31 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0 AND Apache-2.0"
+rust-version = "1.88"
+
+[workspace.dependencies]
+pbjson = "0.9"
+pbjson-types = "0.9"
+pbjson-build = "0.9"
+prost = "0.14"
+prost-build = "0.14"
+prost-types = "0.14"
+protox = "0.10"
+regex = "1"
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
+thiserror = "2"
+tonic = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+prost-reflect = "0.16"

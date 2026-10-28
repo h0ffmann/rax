@@ -1,0 +1,31 @@
+[package]
+name = "rax-api"
+description = "AX v1alpha1 API types, manifest encoding and validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+pbjson.workspace = true
+pbjson-types.workspace = true
+prost.workspace = true
+prost-reflect.workspace = true
+regex.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+thiserror.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+
+[build-dependencies]
+prost.workspace = true
+pbjson-build.workspace = true
+prost-build.workspace = true
+protox.workspace = true
+tonic-prost-build.workspace = true
