@@ -14,8 +14,8 @@ The port lands in four steps, each its own pull request:
 | Step | Scope | Status |
 |---|---|---|
 | 1 | Cargo workspace, API types generated from `ax.proto`, YAML manifests, validation | done |
-| 2 | `rax-server`: gRPC API, in-memory and PostgreSQL stores, distributed locks | in review |
-| 3 | Substrate client, controller and reconciliation | not started |
+| 2 | `rax-server`: gRPC API, in-memory and PostgreSQL stores, distributed locks | done |
+| 3 | Substrate client, controller and reconciliation | in review |
 | 4 | `rax` CLI, `rax-task-runner`, tunnel, end-to-end parity tests | not started |
 
 ## Layout
@@ -24,7 +24,8 @@ The port lands in four steps, each its own pull request:
 |---|---|---|
 | `crates/rax-api` | `pkg/apis/v1alpha1` | Generated types and gRPC service, YAML encoding, validation |
 | `crates/rax-store` | `internal/store`, `internal/lock` | In-memory and PostgreSQL stores, in-memory and PostgreSQL locks |
-| `crates/rax-server` | `internal/server`, `cmd/ax-server` | The gRPC service and `/healthz` on one port, and the `rax-server` binary |
+| `crates/rax-substrate` | `internal/substrate` | The Substrate control API client (gRPC over rustls), actor templates, readiness probes, and an in-memory Substrate for tests |
+| `crates/rax-server` | `internal/server`, `internal/controller`, `cmd/ax-server` | The gRPC service and `/healthz` on one port, the task reconciler, and the `rax-server` binary |
 
 The PostgreSQL store uses AX's schema and the same protobuf JSON documents,
 so RAX and AX can read each other's records.
@@ -44,8 +45,17 @@ cargo run -p rax-server -- --store memory:// --addr 127.0.0.1:8080
 AX_STORE=postgres://rax@localhost:5432/rax cargo run -p rax-server
 ```
 
-`curl localhost:8080/healthz` answers `ok`. Until the Substrate client lands
-(step 3), tasks are stored and reported as stored, without actors.
+`curl localhost:8080/healthz` answers `ok`.
+
+The server reconciles tasks on Agent Substrate. Inside the cluster the
+defaults find it (`api.ate-system.svc.cluster.local:443`, with the mounted
+service account token and trust bundle). Elsewhere, point it at Substrate
+with `--substrate-endpoint`, and `--substrate-ca-file`,
+`--substrate-token-file`, `--substrate-insecure-tls` or
+`--substrate-plaintext` as needed. Like AX, each task gets an actor named
+after it and a per-task actor template named `<task>-tmpl-<digest>`.
+Setting `ATENET_ROUTER_ADDR` also probes workspace readiness through the
+router.
 
 ## Development
 
