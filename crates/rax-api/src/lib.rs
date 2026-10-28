@@ -25,7 +25,9 @@ pub use validate::{
     MAX_TASK_YAML_SIZE, ValidationError, validate_model, validate_name, validate_object_meta,
     validate_task, validate_task_config, validate_task_size, validate_workspace,
 };
-pub use yaml::{Manifest, YamlError, from_yaml, from_yaml_lenient, to_json, to_yaml};
+pub use yaml::{
+    Manifest, YamlError, from_json_lenient, from_yaml, from_yaml_lenient, to_json, to_yaml,
+};
 
 pub const API_VERSION: &str = "ax.io/v1alpha1";
 pub const KIND_TASK: &str = "Task";

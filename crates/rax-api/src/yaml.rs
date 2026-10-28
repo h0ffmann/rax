@@ -112,6 +112,14 @@ pub fn to_json<T: Manifest>(m: &T) -> Result<Value, YamlError> {
     Ok(v)
 }
 
+/// Decodes a resource from the protobuf JSON mapping, ignoring fields it
+/// doesn't know, as stores do for records a newer server may have written.
+/// Legacy shapes are not rewritten: stored records are always current.
+pub fn from_json_lenient<T: Manifest>(mut doc: Value) -> Result<T, YamlError> {
+    prune_unknown(&mut doc, &descriptor::<T>());
+    Ok(serde_json::from_value(doc)?)
+}
+
 fn descriptor<T: Manifest>() -> MessageDescriptor {
     POOL.get_message_by_name(T::MESSAGE)
         .unwrap_or_else(|| panic!("{} is not in the AX descriptor set", T::MESSAGE))
