@@ -5,3 +5,7 @@ Version 2.0; a copy is in LICENSE-APACHE. Files carried over from AX, such as
 proto/ax/v1alpha1/ax.proto, keep their original copyright and license headers.
 The Rust code is a translation of AX's Go implementation and is offered under
 the terms in LICENSE, with the Apache 2.0 notices above preserved.
+
+proto/ateapi/ateapi.proto is copied from Agent Substrate
+(https://github.com/agent-substrate/substrate, go.ate.dev/substrate v0.6.0),
+Copyright 2026 Google LLC, licensed under the Apache License, Version 2.0.

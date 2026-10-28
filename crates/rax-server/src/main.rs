@@ -4,10 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clap::Parser;
+use rax_server::controller::{ControllerOptions, SubstrateActors, TaskReconciler};
 use rax_server::{AxService, ServerOptions, router};
 use rax_store::{
     Locker, MemoryLocker, MemoryStore, PostgresOptions, PostgresStore, Store, describe_url,
 };
+use rax_substrate::ClientOptions;
 
 /// Serves the AX gRPC API and `/healthz` on one port.
 #[derive(Parser, Debug)]
@@ -26,6 +28,44 @@ struct Args {
         default_value = "postgres://ax@localhost:5432/ax?sslmode=disable"
     )]
     store: String,
+
+    /// Agent Substrate control API endpoint.
+    #[arg(long, default_value = rax_substrate::DEFAULT_TARGET)]
+    substrate_endpoint: String,
+
+    /// Authority and TLS server name for the Substrate endpoint.
+    #[arg(long, default_value = "api.ate-system.svc")]
+    substrate_authority: String,
+
+    /// Bearer token file for Substrate. Defaults to SUBSTRATE_TOKEN_FILE or
+    /// the mounted service account token.
+    #[arg(long, default_value = "", hide_default_value = true)]
+    substrate_token_file: String,
+
+    /// CA PEM file for Substrate TLS. Defaults to SUBSTRATE_CA_FILE or the
+    /// mounted trust bundle.
+    #[arg(long, default_value = "", hide_default_value = true)]
+    substrate_ca_file: String,
+
+    /// Skip verifying Substrate's TLS certificate.
+    #[arg(long)]
+    substrate_insecure_tls: bool,
+
+    /// Connect to Substrate over plaintext gRPC.
+    #[arg(long)]
+    substrate_plaintext: bool,
+
+    /// Default Substrate ActorTemplate, as `name` or `atespace/name`.
+    #[arg(long, default_value = "default-template")]
+    template: String,
+
+    /// Atespace of the default ActorTemplate.
+    #[arg(long, default_value = rax_api::DEFAULT_SYSTEM_NAMESPACE)]
+    template_atespace: String,
+
+    /// Container image for tasks that do not set spec.image.
+    #[arg(long, env = "AX_DEFAULT_TASK_IMAGE", default_value = rax_api::DEFAULT_TASK_IMAGE)]
+    default_task_image: String,
 }
 
 #[tokio::main]
@@ -61,16 +101,45 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         (pg.clone(), pg)
     };
 
-    // Substrate reconciliation arrives with the Substrate client; until then
-    // tasks are stored and reported as stored.
-    tracing::warn!("running without substrate reconciliation");
-    let service = AxService::new(
-        store,
-        ServerOptions {
-            locker: Some(locker),
-            ..Default::default()
-        },
+    tracing::info!(
+        substrate_endpoint = args.substrate_endpoint,
+        template = args.template,
+        default_task_image = args.default_task_image,
+        "connecting to substrate"
     );
+    let client = rax_substrate::Client::connect(ClientOptions {
+        target: args.substrate_endpoint,
+        authority: args.substrate_authority,
+        token_file: args.substrate_token_file,
+        ca_file: args.substrate_ca_file,
+        insecure_tls: args.substrate_insecure_tls,
+        plaintext: args.substrate_plaintext,
+    });
+    let mut opts = ServerOptions {
+        locker: Some(locker),
+        ..Default::default()
+    };
+    match client {
+        Ok(client) => {
+            let reconciler = TaskReconciler::new(
+                client.clone(),
+                ControllerOptions {
+                    default_template: args.template,
+                    default_template_atespace: args.template_atespace,
+                    default_task_image: args.default_task_image,
+                    router_addr: std::env::var("ATENET_ROUTER_ADDR").unwrap_or_default(),
+                    ..Default::default()
+                },
+            );
+            opts.reconciler = Some(Arc::new(reconciler));
+            opts.actors = Some(Arc::new(SubstrateActors::new(client)));
+        }
+        Err(e) => tracing::warn!(
+            error = %e,
+            "could not initialize substrate client; running without substrate reconciliation"
+        ),
+    }
+    let service = AxService::new(store, opts);
 
     let listener = tokio::net::TcpListener::bind(&args.addr).await?;
     tracing::info!(addr = %listener.local_addr()?, "starting rax-server");

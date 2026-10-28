@@ -6,6 +6,7 @@
 //! through [`Actors`] and drives actors through a [`Reconciler`]; both are
 //! implemented on top of the Substrate client.
 
+pub mod controller;
 mod http;
 mod service;
 mod tasks;
