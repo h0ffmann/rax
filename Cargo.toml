@@ -29,3 +29,16 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 prost-reflect = "0.16"
+async-trait = "0.1"
+axum = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+deadpool-postgres = "0.14"
+hex = "0.4"
+rand = "0.9"
+rax-api = { path = "crates/rax-api" }
+rax-store = { path = "crates/rax-store" }
+rax-server = { path = "crates/rax-server" }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
