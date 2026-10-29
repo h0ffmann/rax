@@ -1395,6 +1395,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rax-guest"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "protox",
+ "rand 0.9.5",
+ "rax-substrate",
+ "rustls",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tonic-reflection",
+ "tracing",
+]
+
+[[package]]
 name = "rax-server"
 version = "0.1.0"
 dependencies = [
@@ -1457,6 +1479,24 @@ dependencies = [
  "tower",
  "tracing",
  "webpki-roots",
+]
+
+[[package]]
+name = "rax-task-runner"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "libc",
+ "rax-api",
+ "rax-guest",
+ "tempfile",
+ "tokio",
+ "tonic",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2019,6 +2059,20 @@ dependencies = [
  "syn 2.0.119",
  "tempfile",
  "tonic-build",
+]
+
+[[package]]
+name = "tonic-reflection"
+version = "0.14.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c89a7f3d7134b1878c4d3084427b963c8c823f92320b6b20b820198ec54cde27"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-prost",
 ]
 
 [[package]]

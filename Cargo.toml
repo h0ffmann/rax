@@ -54,3 +54,8 @@ tokio-stream = { version = "0.1", features = ["net"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tower = { version = "0.5", features = ["util"] }
 webpki-roots = "1"
+libc = "0.2"
+tempfile = "3"
+tonic-reflection = "0.14"
+rax-guest = { path = "crates/rax-guest" }
+rax-task-runner = { path = "crates/rax-task-runner" }
