@@ -9,3 +9,9 @@ the terms in LICENSE, with the Apache 2.0 notices above preserved.
 proto/ateapi/ateapi.proto is copied from Agent Substrate
 (https://github.com/agent-substrate/substrate, go.ate.dev/substrate v0.6.0),
 Copyright 2026 Google LLC, licensed under the Apache License, Version 2.0.
+
+proto/ateenv/v1alpha/guest.proto is copied from Agent Substrate's env module
+(https://github.com/agent-substrate/env, v0.0.11-0.20260912052224-4468a200b170),
+Copyright 2026 Google LLC, licensed under the Apache License, Version 2.0.
+crates/rax-guest is a translation of that module's guest package, under the
+same terms as the rest of RAX with its Apache 2.0 notice preserved.

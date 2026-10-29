@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs AX on a local single-node minikube or MicroK8s cluster: Agent Substrate
-# built from source, AX's own manifests, and the control plane built from this
-# checkout (rax-server) or from AX (ax-server). It follows AX's kind setup
+# built from source, AX's own manifests, and the control plane, task-runner and
+# CLI built from this checkout (rax) or from AX. It follows AX's kind setup
 # (hack/setup-e2e-kind.sh in AX) step by step, swapping the kind-only parts.
 # See docs/local-kubernetes.md, which also lists what does not work.
 #
@@ -12,13 +12,15 @@
 #   up         Create (minikube) or configure (MicroK8s) the cluster
 #   deploy     Deploy the registry, Substrate, Postgres and the AX control plane
 #   status     Show the AX and Substrate workloads
-#   ax         Run the ax CLI against the cluster, e.g. `ax minikube get tasks`
+#   ax         Run the CLI (rax or ax) against the cluster, e.g. `ax minikube get tasks`
 #   e2e        Run AX's end-to-end suite against the cluster
 #   down       Delete the minikube cluster, or remove AX and Substrate from MicroK8s
 #   uninstall  Remove MicroK8s itself (minikube: same as down)
 #
 # Configuration (environment):
 #   SERVER               Control plane to deploy: rax (default, this checkout) or ax (AX's Go ax-server)
+#   RUNNER               Task-runner image: rax (default, this checkout) or ax (AX's Go ax-task-runner)
+#   CLI                  CLI that `ax` and `e2e` use: rax (default, this checkout) or ax (AX's Go ax)
 #   AX_DIR               AX checkout (default: ../ax if present, else a clone in .tmp/local/ax)
 #   AX_REPO, AX_REF      What to clone when AX_DIR is unset (default: https://github.com/google/ax.git, main)
 #   SUBSTRATE_DIR        Substrate checkout, used as is (default: a clone in .tmp/local/substrate)
@@ -48,6 +50,8 @@ DISTRO="${2:-}"
 shift 2 || true
 
 SERVER="${SERVER:-rax}"
+RUNNER="${RUNNER:-rax}"
+CLI="${CLI:-rax}"
 K8S_VERSION="${K8S_VERSION:-v1.37.0}"
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-rax}"
 MINIKUBE_DRIVER="${MINIKUBE_DRIVER:-docker}"
@@ -470,22 +474,38 @@ push() {
 }
 
 build_images() {
-  log "Building the ax CLI (host) and ax-task-runner (linux/${NODE_ARCH}) from AX..."
+  log "Building the CLI (${CLI}, host) and what runs in the cluster (linux/${NODE_ARCH})..."
   (
     cd "${AX_DIR}"
     mkdir -p "bin/linux_${NODE_ARCH}"
-    CGO_ENABLED=0 go build -o "${AX_BIN}" ./cmd/ax
-    CGO_ENABLED=0 GOOS=linux GOARCH="${NODE_ARCH}" go build -o "bin/linux_${NODE_ARCH}/ax-task-runner" ./cmd/ax-task-runner
+    if [[ "${CLI}" == "ax" ]]; then
+      CGO_ENABLED=0 go build -o "${AX_BIN}" ./cmd/ax
+    fi
+    if [[ "${RUNNER}" == "ax" ]]; then
+      CGO_ENABLED=0 GOOS=linux GOARCH="${NODE_ARCH}" go build -o "bin/linux_${NODE_ARCH}/ax-task-runner" ./cmd/ax-task-runner
+    fi
     if [[ "${SERVER}" == "ax" ]]; then
       CGO_ENABLED=0 GOOS=linux GOARCH="${NODE_ARCH}" go build -o "bin/linux_${NODE_ARCH}/ax-server" ./cmd/ax-server
     fi
   )
+  if [[ "${CLI}" == "rax" ]]; then
+    (cd "${REPO_ROOT}" && cargo build --release --locked -p rax-cli)
+    cp "${REPO_ROOT}/target/release/rax" "${AX_BIN}"
+  fi
 
   log "Building and pushing images to ${REGISTRY_ADDR}..."
-  # The E2E task-runner image is AX's image plus a sample git repo, so AX's
-  # end-to-end suite can run against this cluster too.
-  docker build -q --platform "linux/${NODE_ARCH}" -t "${REGISTRY_ADDR}/ax-task-runner:base" \
-    --build-arg TARGETARCH="${NODE_ARCH}" -f "${AX_DIR}/Dockerfile.task-runner" "${AX_DIR}" > /dev/null
+  # The E2E task-runner image is the runner image plus a sample git repo, so
+  # AX's end-to-end suite can run against this cluster too.
+  case "${RUNNER}" in
+    rax)
+      docker build -q --platform "linux/${NODE_ARCH}" -t "${REGISTRY_ADDR}/ax-task-runner:base" \
+        -f "${REPO_ROOT}/Dockerfile.task-runner" "${REPO_ROOT}" > /dev/null
+      ;;
+    ax)
+      docker build -q --platform "linux/${NODE_ARCH}" -t "${REGISTRY_ADDR}/ax-task-runner:base" \
+        --build-arg TARGETARCH="${NODE_ARCH}" -f "${AX_DIR}/Dockerfile.task-runner" "${AX_DIR}" > /dev/null
+      ;;
+  esac
   AX_DEFAULT_TASK_IMAGE="$(push "${REGISTRY_ADDR}/ax-task-runner:local" "${AX_DIR}" \
     --build-arg BASE_IMAGE="${REGISTRY_ADDR}/ax-task-runner:base" -f "${AX_DIR}/test/e2e/Dockerfile.task-runner.e2e")"
   case "${SERVER}" in
@@ -530,7 +550,11 @@ EOF
 
 deploy() {
   need kubectl docker go git curl openssl
-  case "${SERVER}" in rax | ax) ;; *) die "SERVER must be rax or ax, not ${SERVER}" ;; esac
+  local var
+  for var in SERVER RUNNER CLI; do
+    case "${!var}" in rax | ax) ;; *) die "${var} must be rax or ax, not ${!var}" ;; esac
+  done
+  if [[ "${CLI}" == "rax" ]]; then need cargo; fi
   check_cluster
   NODE_ARCH="$(k get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}')"
   [[ "$(k get nodes -o name | wc -l)" -eq 1 ]] || warn "more than one node: the local registry only serves its own node"
@@ -542,7 +566,7 @@ deploy() {
   build_images
   deploy_control_plane
   write_env
-  log "AX is running on ${DISTRO} with ${SERVER}-server. Try:"
+  log "AX is running on ${DISTRO} with ${SERVER}-server and the ${RUNNER} task-runner. Try:"
   cat >&2 << EOF
   just ax ${DISTRO} apply -f ${AX_DIR}/examples/task.yaml
   just ax ${DISTRO} get tasks
