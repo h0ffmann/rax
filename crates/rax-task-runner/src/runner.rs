@@ -76,9 +76,17 @@ pub async fn run(cfg: Config, shutdown: impl Future<Output = ()>) -> Result<(), 
     } else {
         cfg.metadata_port
     };
-    let spec = cfg.task.as_ref().and_then(|t| t.spec.clone()).unwrap_or_default();
+    let spec = cfg
+        .task
+        .as_ref()
+        .and_then(|t| t.spec.clone())
+        .unwrap_or_default();
     let ws_path = spec.workspace_path().to_owned();
-    let ws_name = spec.workspace.as_ref().map(|w| w.name.clone()).unwrap_or_default();
+    let ws_name = spec
+        .workspace
+        .as_ref()
+        .map(|w| w.name.clone())
+        .unwrap_or_default();
     let ax_dir = cfg.ax_dir.unwrap_or_else(|| PathBuf::from(DEFAULT_AX_DIR));
     tracing::info!(port, workspace = %ws_name, ws_path = %ws_path, "initializing AX task runner");
 

@@ -22,8 +22,9 @@ pub fn load_spec<T: Manifest>(
     env_var: &str,
 ) -> Result<Option<T>, String> {
     let raw = match file {
-        Some(path) => std::fs::read_to_string(path)
-            .map_err(|e| format!("reading {}: {e}", path.display()))?,
+        Some(path) => {
+            std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?
+        }
         None => match std::env::var(env_var) {
             Ok(v) if !v.is_empty() => v,
             _ => return Ok(None),

@@ -56,6 +56,7 @@ tower = { version = "0.5", features = ["util"] }
 webpki-roots = "1"
 libc = "0.2"
 tempfile = "3"
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "pem", "ring"] }
 tonic-reflection = "0.14"
 rax-guest = { path = "crates/rax-guest" }
 rax-task-runner = { path = "crates/rax-task-runner" }

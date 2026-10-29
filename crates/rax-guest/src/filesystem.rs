@@ -273,7 +273,10 @@ mod tests {
             read_buffer_size: 0,
         });
         assert_eq!(svc.resolve("a/b").unwrap(), PathBuf::from("/workspace/a/b"));
-        assert_eq!(svc.resolve("/workspace").unwrap(), PathBuf::from("/workspace"));
+        assert_eq!(
+            svc.resolve("/workspace").unwrap(),
+            PathBuf::from("/workspace")
+        );
         for bad in ["../etc/passwd", "/etc/passwd", "/workspace2/x"] {
             assert_eq!(
                 svc.resolve(bad).unwrap_err().code(),
@@ -290,6 +293,9 @@ mod tests {
             root_directory: Some("/".into()),
             read_buffer_size: 0,
         });
-        assert_eq!(open.resolve("/etc/passwd").unwrap(), PathBuf::from("/etc/passwd"));
+        assert_eq!(
+            open.resolve("/etc/passwd").unwrap(),
+            PathBuf::from("/etc/passwd")
+        );
     }
 }

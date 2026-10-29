@@ -80,10 +80,7 @@ impl Client {
         };
         let channel = endpoint.connect_with_connector_lazy(connector);
         let actor = target_actor
-            .map(|a| {
-                a.parse()
-                    .map_err(|_| format!("invalid target actor {a:?}"))
-            })
+            .map(|a| a.parse().map_err(|_| format!("invalid target actor {a:?}")))
             .transpose()?;
         Ok(Self {
             process: ProcessServiceClient::with_interceptor(channel, TargetActor(actor)),
@@ -189,7 +186,11 @@ impl Client {
 /// Copies `r` to the process's stdin and closes it when `r` ends. Errors are
 /// dropped: they mean the process exited or the connection is gone, which
 /// the output stream reports.
-async fn forward_stdin(mut process: Process, pid: String, mut r: Box<dyn AsyncRead + Send + Unpin>) {
+async fn forward_stdin(
+    mut process: Process,
+    pid: String,
+    mut r: Box<dyn AsyncRead + Send + Unpin>,
+) {
     let (tx, rx) = mpsc::channel(4);
     let call = tokio::spawn(async move {
         let _ = process

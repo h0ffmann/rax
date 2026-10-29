@@ -16,9 +16,22 @@ use crate::{Client, RetryPolicy};
 /// The worker IP actors get when they resume, unless a test sets another.
 pub const DEFAULT_WORKER_IP: &str = "10.244.1.42";
 
+/// Runs the workload behind actors, for tests that want real task
+/// containers (for example task-runner processes) instead of bare records.
+pub trait Lifecycle: Send + Sync + std::fmt::Debug {
+    /// Starts the actor's workload from its template and returns the worker
+    /// IP to report, such as `127.0.0.1:41234`.
+    fn resume(&self, actor: &Actor, template: Option<&ActorTemplate>) -> String;
+    /// Stops the actor's workload, on suspend, revert and delete.
+    fn stop(&self, atespace: &str, name: &str);
+}
+
 /// The fake's state. Tests read and change it between calls.
 #[derive(Debug)]
 pub struct State {
+    /// Runs workloads on resume and stops them on suspend or delete. Without
+    /// it, actors are only records and get [`State::worker_ip`].
+    pub lifecycle: Option<Arc<dyn Lifecycle>>,
     pub atespaces: BTreeSet<String>,
     /// Templates by "atespace/name".
     pub templates: BTreeMap<String, ActorTemplate>,
@@ -46,6 +59,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            lifecycle: None,
             atespaces: BTreeSet::new(),
             templates: BTreeMap::new(),
             created_templates: Vec::new(),
@@ -381,7 +395,12 @@ impl Control for FakeSubstrate {
     ) -> Result<Response<ResumeActorResponse>, Status> {
         let k = ref_key(&req.get_ref().actor);
         let mut s = self.begin("ResumeActor", &k, &req)?;
-        let ip = s.worker_ip.clone();
+        let mut ip = s.worker_ip.clone();
+        if let Some(lifecycle) = s.lifecycle.clone() {
+            let a = s.actors.get(&k).ok_or_else(|| not_found("actor", &k))?;
+            let template = s.templates.get(&ref_key(&a.actor_template));
+            ip = lifecycle.resume(a, template);
+        }
         let a = s.actors.get_mut(&k).ok_or_else(|| not_found("actor", &k))?;
         set_state(a, ActorState::Running, Some(&ip));
         Ok(Response::new(ResumeActorResponse {
@@ -396,6 +415,10 @@ impl Control for FakeSubstrate {
     ) -> Result<Response<SuspendActorResponse>, Status> {
         let k = ref_key(&req.get_ref().actor);
         let mut s = self.begin("SuspendActor", &k, &req)?;
+        if let Some(lifecycle) = s.lifecycle.clone() {
+            let (atespace, name) = k.split_once('/').unwrap_or_default();
+            lifecycle.stop(atespace, name);
+        }
         let a = s.actors.get_mut(&k).ok_or_else(|| not_found("actor", &k))?;
         set_state(a, ActorState::Suspended, None);
         Ok(Response::new(SuspendActorResponse {
@@ -409,6 +432,10 @@ impl Control for FakeSubstrate {
     ) -> Result<Response<RevertActorResponse>, Status> {
         let k = ref_key(&req.get_ref().actor);
         let mut s = self.begin("RevertActor", &k, &req)?;
+        if let Some(lifecycle) = s.lifecycle.clone() {
+            let (atespace, name) = k.split_once('/').unwrap_or_default();
+            lifecycle.stop(atespace, name);
+        }
         let a = s.actors.get_mut(&k).ok_or_else(|| not_found("actor", &k))?;
         set_state(a, ActorState::Suspended, None);
         Ok(Response::new(RevertActorResponse {
@@ -422,6 +449,10 @@ impl Control for FakeSubstrate {
     ) -> Result<Response<Actor>, Status> {
         let k = ref_key(&req.get_ref().actor);
         let mut s = self.begin("DeleteActor", &k, &req)?;
+        if let Some(lifecycle) = s.lifecycle.clone() {
+            let (atespace, name) = k.split_once('/').unwrap_or_default();
+            lifecycle.stop(atespace, name);
+        }
         let polls = s.deleting_polls;
         let Some(a) = s.actors.get_mut(&k) else {
             return Err(not_found("actor", &k));

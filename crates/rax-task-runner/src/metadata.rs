@@ -142,20 +142,23 @@ impl Server {
         tracing::info!(addr = %metadata_addr, "metadata server started");
 
         let (shutdown, _) = watch::channel(false);
-        let tasks = [(probe_lis, probe, "probe and guest"), (metadata_lis, metadata, "metadata")]
-            .into_iter()
-            .map(|(lis, router, name)| {
-                let mut stop = shutdown.subscribe();
-                tokio::spawn(async move {
-                    let serve = axum::serve(lis, router).with_graceful_shutdown(async move {
-                        let _ = stop.wait_for(|s| *s).await;
-                    });
-                    if let Err(e) = serve.await {
-                        tracing::error!(error = %e, "{name} server error");
-                    }
-                })
+        let tasks = [
+            (probe_lis, probe, "probe and guest"),
+            (metadata_lis, metadata, "metadata"),
+        ]
+        .into_iter()
+        .map(|(lis, router, name)| {
+            let mut stop = shutdown.subscribe();
+            tokio::spawn(async move {
+                let serve = axum::serve(lis, router).with_graceful_shutdown(async move {
+                    let _ = stop.wait_for(|s| *s).await;
+                });
+                if let Err(e) = serve.await {
+                    tracing::error!(error = %e, "{name} server error");
+                }
             })
-            .collect();
+        })
+        .collect();
 
         Ok(Self {
             shared,

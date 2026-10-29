@@ -229,9 +229,8 @@ impl Tracker {
         if config.log_dir.as_os_str().is_empty() {
             config.log_dir = std::env::temp_dir().join("ate-jobs");
         }
-        std::fs::create_dir_all(&config.log_dir).map_err(|e| {
-            std::io::Error::new(e.kind(), format!("creating log directory: {e}"))
-        })?;
+        std::fs::create_dir_all(&config.log_dir)
+            .map_err(|e| std::io::Error::new(e.kind(), format!("creating log directory: {e}")))?;
         let inner = Arc::new(Inner {
             config,
             processes: Mutex::default(),
@@ -334,12 +333,14 @@ impl Tracker {
 
         let limit = self.config().max_log_bytes;
         let copiers = [
-            child.stdout.take().map(|out| {
-                tokio::spawn(copy_capped(out, stdout_file, limit, state.clone()))
-            }),
-            child.stderr.take().map(|err| {
-                tokio::spawn(copy_capped(err, stderr_file, limit, state.clone()))
-            }),
+            child
+                .stdout
+                .take()
+                .map(|out| tokio::spawn(copy_capped(out, stdout_file, limit, state.clone()))),
+            child
+                .stderr
+                .take()
+                .map(|err| tokio::spawn(copy_capped(err, stderr_file, limit, state.clone()))),
         ];
 
         let timeout = if opts.timeout.is_zero() {
@@ -844,7 +845,11 @@ mod tests {
         let t = tracker(dir.path());
         let p = t
             .start(StartOptions {
-                command: vec!["sh".into(), "-c".into(), "echo out; echo err >&2; exit 3".into()],
+                command: vec![
+                    "sh".into(),
+                    "-c".into(),
+                    "echo out; echo err >&2; exit 3".into(),
+                ],
                 env: [("X".to_owned(), "y".to_owned())].into(),
                 ..Default::default()
             })
@@ -928,7 +933,10 @@ mod tests {
         // The default timeout kills the whole group.
         assert_eq!(wait_exit(&p).await.exit_code, 128 + 9);
         let out = String::from_utf8(read_spool(&p.stdout_path, 0).unwrap().0).unwrap();
-        assert!(out.starts_with("1234\n\n[guest: maximum log limit"), "{out}");
+        assert!(
+            out.starts_with("1234\n\n[guest: maximum log limit"),
+            "{out}"
+        );
         // A finished process frees its slot.
         let q = t
             .start(StartOptions {

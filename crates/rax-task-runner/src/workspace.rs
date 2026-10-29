@@ -243,7 +243,8 @@ fn write_marker(path: &Path, ws: Option<&Workspace>) {
         .map(|m| m.name.as_str())
         .filter(|n| !n.is_empty())
         .unwrap_or("unknown");
-    let now = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let content = format!("workspace: {name}\ninitialized_at: {now}\n");
     if let Err(e) = std::fs::write(path, content) {
         tracing::warn!(path = %path.display(), error = %e, "failed to write initialized marker file");
@@ -312,7 +313,11 @@ mod tests {
             .current_dir(dir)
             .output()
             .unwrap();
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     const INIT: &str = "git init -q && git symbolic-ref HEAD refs/heads/main && git config user.email test@ax.io && git config user.name AX";
@@ -337,7 +342,10 @@ mod tests {
         assert!(tmp.path().join("skills").is_dir());
         let marker = state.join(marker_name(target));
         let content = std::fs::read_to_string(&marker).unwrap();
-        assert!(content.starts_with("workspace: test-ws\ninitialized_at: "), "{content}");
+        assert!(
+            content.starts_with("workspace: test-ws\ninitialized_at: "),
+            "{content}"
+        );
         assert!(!tmp.path().join(".ax").exists());
 
         let second = setup_workspace(Some(&ws), target, &state).await.unwrap();
@@ -349,7 +357,9 @@ mod tests {
         let src = tempfile::tempdir().unwrap();
         git(
             src.path(),
-            &format!("{INIT} && for i in 1 2 3; do echo $i > f.txt && git add . && git commit -qm c$i; done"),
+            &format!(
+                "{INIT} && for i in 1 2 3; do echo $i > f.txt && git add . && git commit -qm c$i; done"
+            ),
         );
         let tmp = tempfile::tempdir().unwrap();
         let state = tmp.path().join("ax-state");
@@ -422,9 +432,13 @@ mod tests {
             },
         );
         let ws_dir = tmp.path().join("ws");
-        setup_workspace(Some(&ws), ws_dir.to_str().unwrap(), &tmp.path().join("state"))
-            .await
-            .unwrap();
+        setup_workspace(
+            Some(&ws),
+            ws_dir.to_str().unwrap(),
+            &tmp.path().join("state"),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             std::fs::read_to_string(ws_dir.join("config/settings.json")).unwrap(),
             r#"{"env": "production"}"#
@@ -461,8 +475,14 @@ mod tests {
             (repo("x", "u", "/opt/src"), "/opt/src"),
             (repo("x", "u", "sub/dir"), "/workspace/sub/dir"),
             (repo("tools", "https://h/a/b.git", ""), "/workspace/tools"),
-            (repo("origin", "https://github.com/chalk/chalk.git", ""), "/workspace/chalk"),
-            (repo("", "git@github.com:org/proj.git/", ""), "/workspace/proj"),
+            (
+                repo("origin", "https://github.com/chalk/chalk.git", ""),
+                "/workspace/chalk",
+            ),
+            (
+                repo("", "git@github.com:org/proj.git/", ""),
+                "/workspace/proj",
+            ),
             (repo("", "", ""), "/workspace/repo"),
         ] {
             assert_eq!(clone_destination(&r, t), PathBuf::from(want), "{r:?}");

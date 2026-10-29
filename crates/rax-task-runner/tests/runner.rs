@@ -171,7 +171,10 @@ async fn starts_command_with_injected_env() {
     h.spec().command = vec![
         "sh".into(),
         "-c".into(),
-        format!("echo \"$DEMO_ENV $AX_METADATA_URL $(pwd)\" > {}", out.display()),
+        format!(
+            "echo \"$DEMO_ENV $AX_METADATA_URL $(pwd)\" > {}",
+            out.display()
+        ),
     ];
     h.start().await;
     let exit = h.wait_exit().await;
@@ -242,12 +245,19 @@ async fn sets_up_bound_workspace() {
     h.start().await;
     assert_eq!(h.wait_exit().await.exit_code, 0);
     assert!(code.is_dir());
-    assert!(h.ax_dir.join(marker_name(&code.display().to_string())).exists());
+    assert!(
+        h.ax_dir
+            .join(marker_name(&code.display().to_string()))
+            .exists()
+    );
     assert_eq!(
         std::fs::canonicalize(std::fs::read_to_string(&out).unwrap().trim()).unwrap(),
         std::fs::canonicalize(&code).unwrap()
     );
-    assert_eq!(get_async(local(h.port), "/readyz").await.unwrap(), (200, "ok\n".into()));
+    assert_eq!(
+        get_async(local(h.port), "/readyz").await.unwrap(),
+        (200, "ok\n".into())
+    );
     let (status, body) = get_async(local(h.metadata_port), "/metadata/v1alpha1/ax/workspace")
         .await
         .unwrap();
@@ -276,27 +286,44 @@ async fn metadata_server() {
         spec: Some(WorkspaceSpec::default()),
         ..Default::default()
     };
-    let srv = Server::start(0, Some(sample_task(true)), Some(ws), ServerOptions::default())
-        .await
-        .unwrap();
+    let srv = Server::start(
+        0,
+        Some(sample_task(true)),
+        Some(ws),
+        ServerOptions::default(),
+    )
+    .await
+    .unwrap();
     let probe = local(srv.probe_addr().port());
-    assert_eq!(get_async(probe, "/healthz").await.unwrap(), (200, "ok\n".into()));
+    assert_eq!(
+        get_async(probe, "/healthz").await.unwrap(),
+        (200, "ok\n".into())
+    );
     assert_eq!(get_async(probe, "/readyz").await.unwrap().0, 503);
     srv.set_workspace_ready(true);
     assert_eq!(get_async(probe, "/readyz").await.unwrap().0, 200);
 
-    let meta: SocketAddr = srv.metadata_url().trim_start_matches("http://").parse().unwrap();
+    let meta: SocketAddr = srv
+        .metadata_url()
+        .trim_start_matches("http://")
+        .parse()
+        .unwrap();
     assert_eq!(meta.ip().to_string(), "127.0.0.1");
     let (status, body) = get_async(meta, "/metadata/v1alpha1/ax/task").await.unwrap();
     assert_eq!(status, 200);
     let task: Task = rax_api::from_yaml(&body).unwrap();
     assert_eq!(task.metadata.unwrap().name, "task123");
-    let (_, body) = get_async(meta, "/metadata/v1alpha1/ax/workspace").await.unwrap();
+    let (_, body) = get_async(meta, "/metadata/v1alpha1/ax/workspace")
+        .await
+        .unwrap();
     let ws: Workspace = rax_api::from_yaml(&body).unwrap();
     assert_eq!(ws.metadata.unwrap().name, "ws-default");
     // The metadata endpoints are not on the probe port.
     assert_eq!(
-        get_async(probe, "/metadata/v1alpha1/ax/task").await.unwrap().0,
+        get_async(probe, "/metadata/v1alpha1/ax/task")
+            .await
+            .unwrap()
+            .0,
         404
     );
 
@@ -305,7 +332,11 @@ async fn metadata_server() {
     let (out, captured) = capture();
     let code = client
         .exec(ExecOptions {
-            command: vec!["sh".into(), "-c".into(), "echo hello-from-guest; echo $AX_METADATA_URL".into()],
+            command: vec![
+                "sh".into(),
+                "-c".into(),
+                "echo hello-from-guest; echo $AX_METADATA_URL".into(),
+            ],
             cwd: String::new(),
             env: Default::default(),
             stdin: None,
@@ -328,10 +359,23 @@ async fn guest_services_require_debug() {
     let srv = Server::start(0, Some(sample_task(false)), None, ServerOptions::default())
         .await
         .unwrap();
-    let meta: SocketAddr = srv.metadata_url().trim_start_matches("http://").parse().unwrap();
-    assert_eq!(get_async(meta, "/metadata/v1alpha1/ax/task").await.unwrap().0, 200);
+    let meta: SocketAddr = srv
+        .metadata_url()
+        .trim_start_matches("http://")
+        .parse()
+        .unwrap();
     assert_eq!(
-        get_async(meta, "/metadata/v1alpha1/ax/workspace").await.unwrap().0,
+        get_async(meta, "/metadata/v1alpha1/ax/task")
+            .await
+            .unwrap()
+            .0,
+        200
+    );
+    assert_eq!(
+        get_async(meta, "/metadata/v1alpha1/ax/workspace")
+            .await
+            .unwrap()
+            .0,
         404
     );
     let probe = local(srv.probe_addr().port());
@@ -409,7 +453,14 @@ async fn guest_exec() {
     assert_eq!(client.exec(o).await.unwrap(), 17);
 
     // Signals reach the process group.
-    let (mut o, out) = opts(&["sh", "-c", "trap 'echo got-int; exit 5' INT; echo ready; while :; do sleep 0.05; done"], None);
+    let (mut o, out) = opts(
+        &[
+            "sh",
+            "-c",
+            "trap 'echo got-int; exit 5' INT; echo ready; while :; do sleep 0.05; done",
+        ],
+        None,
+    );
     let (sig_tx, sig_rx) = mpsc::channel(1);
     o.signals = Some(sig_rx);
     let exec = tokio::spawn({
