@@ -90,7 +90,11 @@ the settings, and the limitations: the server, task-runner and CLI are RAX's
 by default (`SERVER=ax`, `RUNNER=ax` and `CLI=ax` swap in AX's), AX's E2E
 suite is still Go, Substrate needs pod-certificate feature gates, and only
 single-node clusters with gVisor sandboxes are supported. The setup has not
-been run end to end on a cluster yet.
+been run end to end on a cluster yet. For the cost (about 1.5 CPUs and 2 GiB
+requested, 6 GB on the node and 10 GB of builds on the host), the minimum
+node size and what you can try on minikube, see
+[docs/minikube-footprint.md](docs/minikube-footprint.md); `just footprint
+minikube` measures a running cluster.
 
 The server reconciles tasks on Agent Substrate. Inside the cluster the
 defaults find it (`api.ate-system.svc.cluster.local:443`, with the mounted

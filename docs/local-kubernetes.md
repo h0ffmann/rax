@@ -15,13 +15,16 @@ the control plane and the CLI are RAX's, from this checkout; `RUNNER=ax`,
 > (shellcheck, `just --dry-run`), but no cluster has been brought up with
 > them yet: the environment they were written in cannot give a nested
 > cluster network access. Expect to hit rough edges on the first run, and see
-> [Limitations](#limitations).
+> [Limitations](#limitations). What the deployment costs in CPU, memory and
+> disk, and what you can try on it, is in
+> [minikube-footprint.md](minikube-footprint.md).
 
 ## Quick start
 
 You need a Linux host (x86_64 or arm64) with Docker, Go, Cargo, git, curl,
 openssl and `just`, plus about 4 CPUs, 8 GiB of memory and 40 GB of disk for the
-cluster. AX is expected next to this checkout (`../ax`); otherwise it is
+cluster (see [minikube-footprint.md](minikube-footprint.md) for the minimum and
+what the deployment takes). AX is expected next to this checkout (`../ax`); otherwise it is
 cloned into `.tmp/local/ax`.
 
 ```sh
@@ -49,6 +52,7 @@ Then use the CLI (`rax` unless `CLI=ax`) against the cluster:
 just ax minikube apply -f ../ax/examples/task.yaml
 just ax minikube get tasks
 just status minikube
+just footprint minikube   # CPU, memory, image sizes and disk in use
 
 # or work directly with kubectl and the CLI binary
 source .tmp/local/minikube.env
@@ -209,8 +213,9 @@ Use `SERVER=ax`, `RUNNER=ax` or `CLI=ax` to tell a RAX bug from a setup problem.
   `kubectl port-forward` during `deploy`, which is slow for Substrate's
   images. `--ports` only applies when the cluster is created, so a profile
   created some other way also gets the fallback.
-- Rootless Docker or Podman is not supported: Substrate's workers are
-  privileged gVisor pods.
+- Rootless Docker or Podman is not supported: Substrate's gVisor workers
+  run as root with `SYS_ADMIN`, `NET_ADMIN` and other capabilities, and
+  unconfined AppArmor and seccomp.
 - macOS with Docker Desktop should work with the docker driver but has not
   been tried; `fs.inotify` and proxy ARP are then set inside the minikube
   node, not on the Mac.

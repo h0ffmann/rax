@@ -12,6 +12,7 @@
 #   up         Create (minikube) or configure (MicroK8s) the cluster
 #   deploy     Deploy the registry, Substrate, Postgres and the AX control plane
 #   status     Show the AX and Substrate workloads
+#   footprint  Report the CPU, memory, disk and image sizes the deployment uses
 #   ax         Run the CLI (rax or ax) against the cluster, e.g. `ax minikube get tasks`
 #   e2e        Run AX's end-to-end suite against the cluster
 #   down       Delete the minikube cluster, or remove AX and Substrate from MicroK8s
@@ -591,6 +592,94 @@ status() {
   k -n ax-registry get pods 2> /dev/null || true
 }
 
+# node_sh runs a shell command as root on the node: inside the minikube node,
+# or on the host, which is MicroK8s's node.
+node_sh() {
+  case "${DISTRO}" in
+    minikube) minikube ssh -p "${MINIKUBE_PROFILE}" -- "sudo sh -c '$1'" ;;
+    microk8s) sudo sh -c "$1" ;;
+  esac
+}
+
+# human prints a byte count in MiB or GiB.
+human() {
+  awk -v b="$1" 'BEGIN { if (b >= 1073741824) printf "%.2f GiB", b / 1073741824; else printf "%.0f MiB", b / 1048576 }'
+}
+
+# footprint reports what the deployment costs: the node's CPU and memory
+# (requested, and used when a metrics API is installed), the size of every
+# image the pods run, grouped by namespace, the disk taken on the node, and
+# what the builds left on the host. It only reads.
+footprint() {
+  need kubectl
+  check_cluster
+  local node
+  node="$(k get nodes -o jsonpath='{.items[0].metadata.name}')"
+
+  log "Node ${node}: capacity and what the pods request"
+  k get node "${node}" -o jsonpath='  capacity:    cpu={.status.capacity.cpu} memory={.status.capacity.memory} ephemeral-storage={.status.capacity.ephemeral-storage}{"\n"}  allocatable: cpu={.status.allocatable.cpu} memory={.status.allocatable.memory}{"\n"}'
+  k describe node "${node}" | sed -n '/^Allocated resources:/,/^Events:/p' | sed '$d'
+
+  log "CPU and memory in use"
+  if k top node "${node}" 2> /dev/null; then
+    k top pods -A --sort-by=memory 2> /dev/null | head -n 25 || true
+  else
+    echo "  no metrics API; for live usage run: minikube addons enable metrics-server -p ${MINIKUBE_PROFILE}"
+    echo "  (MicroK8s: microk8s enable metrics-server), then run this again"
+  fi
+
+  log "Images the pods run (uncompressed, as the node reports them)"
+  # Join each pod's image digests with the node's image list, which carries
+  # the sizes. The kubelet lists at most 50 images, the largest first.
+  {
+    k get node "${node}" -o jsonpath='{range .status.images[*]}size {.sizeBytes} {.names[*]}{"\n"}{end}'
+    k get pods -A -o jsonpath='{range .items[*]}pod {.metadata.namespace} {.status.initContainerStatuses[*].imageID} {.status.containerStatuses[*].imageID}{"\n"}{end}'
+  } | awk '
+    # Node image lines come first: index each image by every name and digest.
+    $1 == "size" {
+      label = $3
+      for (i = 3; i <= NF; i++) if ($i !~ /@sha256:/) { label = $i; break }
+      for (i = 3; i <= NF; i++) { d = $i; sub(/^.*@/, "", d); size[$i] = size[d] = $2; tag[$i] = tag[d] = label }
+      next
+    }
+    $1 == "pod" {
+      for (i = 3; i <= NF; i++) {
+        id = $i; sub(/^docker-pullable:\/\//, "", id)
+        if (!(id in size)) sub(/^.*@/, "", id)
+        if (!(id in size) || shown[tag[id]]++) continue
+        printf "  %-34s %7.0f MiB  %s\n", $2, size[id] / 1048576, tag[id]
+        total[$2] += size[id]; all += size[id]
+      }
+    }
+    END {
+      fflush()
+      for (ns in total) printf "  %-34s %7.0f MiB  total\n", ns, total[ns] / 1048576 | "sort"
+      close("sort")
+      printf "  %-34s %7.0f MiB\n", "every image in use", all / 1048576
+    }
+  '
+  echo "  all images on the node: $(human "$(k get node "${node}" -o jsonpath='{range .status.images[*]}{.sizeBytes}{"\n"}{end}' | awk '{ t += $1 } END { print t + 0 }')")"
+
+  log "Disk on the node"
+  case "${DISTRO}" in
+    minikube)
+      node_sh 'df -h /var | tail -n 1; du -sh /var/lib/containerd /var/lib/ax-registry /tmp/hostpath-provisioner /var/lib/kubelet 2>/dev/null; true'
+      ;;
+    microk8s)
+      node_sh 'df -h /var/snap/microk8s/common | tail -n 1; du -sh /var/snap/microk8s/common/var/lib/containerd /var/lib/ax-registry /var/snap/microk8s/common/default-storage /var/snap/microk8s/common/var/lib/kubelet 2>/dev/null; true'
+      ;;
+  esac
+  k get pvc -A 2> /dev/null || true
+
+  log "On the host (builds and caches)"
+  if [[ "${DISTRO}" == minikube ]]; then
+    echo "  minikube node container and base image:"
+    docker ps -a --size --filter "name=^${MINIKUBE_PROFILE}$" --format '    {{.Names}}  {{.Size}}' 2> /dev/null || true
+  fi
+  docker system df 2> /dev/null || true
+  du -sh "${TMP_DIR}" "${REPO_ROOT}/target" 2> /dev/null || true
+}
+
 run_ax() {
   load_env
   exec "${AX_BIN}" "$@"
@@ -642,6 +731,7 @@ case "${COMMAND}" in
   up) "up_${DISTRO}" ;;
   deploy) deploy ;;
   status) status ;;
+  footprint) footprint ;;
   ax) run_ax "$@" ;;
   e2e) run_e2e "$@" ;;
   down) down ;;

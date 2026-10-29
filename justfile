@@ -48,6 +48,10 @@ all distro: (install distro) (up distro) (deploy distro)
 status distro:
     {{local}} status {{distro}}
 
+# Report what the deployment costs: CPU and memory requested and used, image sizes by namespace, disk on the node and on the host.
+footprint distro:
+    {{local}} footprint {{distro}}
+
 # Run the ax CLI against the cluster, e.g. `just ax minikube get tasks`.
 ax distro *args:
     {{local}} ax {{distro}} {{args}}
