@@ -1,0 +1,28 @@
+[package]
+name = "rax-task-runner"
+description = "The process inside every RAX task container: workspace setup, metadata and guest server, and the task command"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rax-task-runner"
+path = "src/main.rs"
+
+[dependencies]
+axum = { workspace = true, features = ["http2"] }
+chrono.workspace = true
+clap.workspace = true
+libc.workspace = true
+rax-api.workspace = true
+rax-guest.workspace = true
+tokio = { workspace = true, features = ["process", "io-std"] }
+tower.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tonic.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

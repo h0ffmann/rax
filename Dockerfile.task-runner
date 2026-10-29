@@ -1,0 +1,27 @@
+# rax-task-runner image, built from this checkout. It is a drop-in
+# replacement for AX's ax-task-runner image: the same base and tools, and the
+# runner at /usr/local/bin/ax-task-runner, where Substrate actor templates
+# expect it.
+#
+#   docker build -f Dockerfile.task-runner -t rax-task-runner .
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked -p rax-task-runner && \
+    cp target/release/rax-task-runner /rax-task-runner
+
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    openssh-client \
+    procps \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /rax-task-runner /usr/local/bin/ax-task-runner
+RUN ln -s ax-task-runner /usr/local/bin/rax-task-runner
+ENTRYPOINT ["/usr/local/bin/ax-task-runner"]

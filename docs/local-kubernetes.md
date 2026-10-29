@@ -5,8 +5,10 @@ AX's own development cluster is [kind](https://kind.sigs.k8s.io/), set up by
 other light distributions, [minikube](https://minikube.sigs.k8s.io/) and
 [MicroK8s](https://microk8s.io/), driven by [`just`](https://just.systems/)
 recipes. Everything that runs in the cluster is built from source: Agent
-Substrate, AX's task-runner, and the control plane, which is `rax-server`
-from this checkout by default or AX's Go `ax-server` with `SERVER=ax`.
+Substrate, the task-runner and the control plane. By default the task-runner,
+the control plane and the CLI are RAX's, from this checkout; `RUNNER=ax`,
+`SERVER=ax` and `CLI=ax` swap in AX's Go `ax-task-runner`, `ax-server` and
+`ax`, one at a time or together.
 
 > **Status: not yet run end to end.** The scripts were written against AX's
 > kind setup and Substrate v0.6.0's installer and are statically checked
@@ -17,8 +19,8 @@ from this checkout by default or AX's Go `ax-server` with `SERVER=ax`.
 
 ## Quick start
 
-You need a Linux host (x86_64 or arm64) with Docker, Go, git, curl, openssl
-and `just`, plus about 4 CPUs, 8 GiB of memory and 40 GB of disk for the
+You need a Linux host (x86_64 or arm64) with Docker, Go, Cargo, git, curl,
+openssl and `just`, plus about 4 CPUs, 8 GiB of memory and 40 GB of disk for the
 cluster. AX is expected next to this checkout (`../ax`); otherwise it is
 cloned into `.tmp/local/ax`.
 
@@ -41,14 +43,14 @@ just microk8s
 The first `deploy` builds Substrate's images from source and takes a while.
 Later runs skip Substrate unless its version changes.
 
-Then use AX's CLI, built from the AX checkout, against the cluster:
+Then use the CLI (`rax` unless `CLI=ax`) against the cluster:
 
 ```sh
 just ax minikube apply -f ../ax/examples/task.yaml
 just ax minikube get tasks
 just status minikube
 
-# or work directly with kubectl and the ax binary
+# or work directly with kubectl and the CLI binary
 source .tmp/local/minikube.env
 kubectl -n ax-system logs deploy/ax-server
 $AX_BIN get tasks
@@ -57,14 +59,17 @@ $AX_BIN get tasks
 ### Iterating on RAX
 
 Change the code, then run `just deploy <distro>` again. It rebuilds the
-`rax-server` image from this checkout, pushes it, and rolls out the new digest.
+`rax-server` and task-runner images and the `rax` CLI from this checkout,
+pushes the images, and rolls out the new digests.
 Substrate, the WorkerPool and the Postgres data are kept.
 
 | Variable | Default | Effect |
 |---|---|---|
 | `SERVER` | `rax` | `ax` deploys AX's Go `ax-server` instead, for comparison against the same database |
+| `RUNNER` | `rax` | `ax` runs tasks on AX's Go `ax-task-runner` image instead |
+| `CLI` | `rax` | `ax` makes `just ax` and `just e2e` use AX's Go `ax` instead |
 | `RESET_DB` | `false` | `true` wipes AX's Postgres volume first |
-| `AX_DIR` | `../ax`, else `.tmp/local/ax` | AX checkout for manifests, task-runner, CLI and e2e suite |
+| `AX_DIR` | `../ax`, else `.tmp/local/ax` | AX checkout for manifests and the e2e suite (and the Go binaries when one of the above is `ax`) |
 | `SUBSTRATE_DIR` | `.tmp/local/substrate` | Use your own Substrate checkout, as is |
 | `SUBSTRATE_REF` | the version AX's `go.mod` pins | Substrate version for the managed clone |
 | `FORCE_INSTALL_SUBSTRATE` | `false` | Reinstall Substrate even if that commit is installed |
@@ -80,8 +85,9 @@ The full list is at the top of [`hack/local/local.sh`](../hack/local/local.sh).
 
 ### AX's end-to-end suite
 
-`deploy` builds AX's E2E task-runner image (AX's image plus a sample git
-repository), so AX's suite can run against the local cluster:
+`deploy` builds the E2E variant of the task-runner image (the runner image
+plus AX's sample git repository, from AX's `Dockerfile.task-runner.e2e`), so
+AX's suite can run against the local cluster, driving the CLI it was given:
 
 ```sh
 RESET_DB=true just deploy minikube
@@ -120,9 +126,11 @@ manifests from `test/e2e/manifests` unchanged:
    first.
 3. **WorkerPool.** AX's `namespace.yaml` and `workerpool.yaml`, with the gVisor
    worker image built by `ko`.
-4. **Images.** `ax-task-runner` (AX's E2E variant) and the server, pushed and
-   deployed by digest, since Substrate only runs digest-pinned images. The
-   `ax` CLI is built for the host into `.tmp/local/bin/ax`.
+4. **Images.** The task-runner (RAX's `Dockerfile.task-runner` or AX's, then
+   AX's E2E variant on top) and the server, pushed and deployed by digest,
+   since Substrate only runs digest-pinned images. The CLI (`rax` or AX's
+   `ax`) is built for the host into `.tmp/local/bin/ax`, where AX's suite
+   looks for it.
 5. **Control plane.** AX's `postgres.yaml` and `ax-server.yaml`, the latter
    with the `rax-server` image. RAX accepts the same flags, environment and
    Go-style `--addr=:8080`, so the manifest needs no changes.
@@ -139,30 +147,26 @@ manifests from `test/e2e/manifests` unchanged:
 
 ### What still comes from AX (Go)
 
-RAX ports AX's control plane only (see the [parity report](../README.md#parity-with-ax)).
-Everything else in the cluster and on your machine is AX's or Substrate's
-Go code, built from their checkouts:
+RAX now ports everything AX ships (see the [parity report](../README.md#parity-with-ax)),
+so with the defaults the control plane, every task's runner and the CLI are
+Rust. What is still Go:
 
-- **Every task runs AX's `ax-task-runner`.** RAX has no task-runner yet, so
-  the metadata server, workspace setup (git clones, files, skills) and the
-  supervised command inside each sandbox are AX's.
-- **The CLI is AX's `ax`**, including `ax ssh` and its tunnels.
-- **The end-to-end suite is AX's** (`test/e2e`, Go).
-- **Substrate is entirely Go** and is built from source on every version
-  change, which needs Go and Docker on the host.
+- **AX's manifests and E2E suite** (`test/e2e`), which is why an AX checkout
+  is required. The suite drives whatever CLI `AX_BIN` names, the `rax` binary
+  by default.
+- **Substrate**, built from source on every version change, which needs Go
+  and Docker on the host.
 
-So an AX checkout is always required, and `just deploy` exercises RAX only as
-the server between AX's CLI and AX's runner.
+### RAX against AX's suite on a cluster has not been run
 
-### RAX against AX's suite has not been run
-
-RAX's own tests run against an in-memory Substrate. Running AX's E2E suite
-against `rax-server` here is the first time RAX meets a real Substrate and
-AX's CLI, so failures are expected. Some will come from the
-[known differences](../README.md#known-differences): for example, condition
-messages read `context: message` rather than gRPC's `rpc error: ...` text,
-and tasks reconciled by RAX get different per-task template digests than
-AX's. Use `SERVER=ax` to tell a RAX bug from a setup problem.
+AX's E2E scenarios pass against RAX locally: `crates/rax-cli/tests/e2e_local.rs`
+replays all seven through the CLI against rax-server, an in-memory Substrate
+and real task-runners, and passes with every mix of RAX and AX's Go server,
+runner and CLI. It cannot catch what only a cluster does: gVisor sandboxes,
+snapshots, the atenet router and the mTLS path of `ssh`, image pulls. Running
+`just e2e` here is the first time RAX meets a real Substrate, so expect rough
+edges. Some may come from the [known differences](../README.md#known-differences).
+Use `SERVER=ax`, `RUNNER=ax` or `CLI=ax` to tell a RAX bug from a setup problem.
 
 ### Substrate's requirements
 

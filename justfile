@@ -21,6 +21,14 @@ lint:
 image tag="rax-server:local":
     docker build -f Dockerfile.server -t {{tag}} .
 
+# Build the task-runner image, a drop-in for AX's ax-task-runner image.
+runner-image tag="rax-task-runner:local":
+    docker build -f Dockerfile.task-runner -t {{tag}} .
+
+# Replay AX's end-to-end scenarios without Kubernetes. Point RAX_E2E_CLI, RAX_E2E_RUNNER or RAX_E2E_SERVER at AX's Go binaries to mix implementations.
+e2e-local *args:
+    cargo test -p rax-cli --test e2e_local {{args}}
+
 # Install a light Kubernetes distribution (minikube or microk8s) and kubectl.
 install distro:
     {{local}} install {{distro}}
