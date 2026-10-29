@@ -1,0 +1,95 @@
+# A container registry for local clusters, standing in for the kind-registry
+# container that AX's and Substrate's kind setup run next to the cluster.
+#
+# It runs on the node's network at port 5001, so for the node's container
+# runtime it is localhost:5001, the address every image is pushed under. From
+# the host it is localhost:5001 too: MicroK8s runs on the host, and minikube
+# publishes the port (--ports=127.0.0.1:5001:5001).
+#
+# Substrate's kind profile tells atelet, which pulls task images itself from
+# inside its pod, to rewrite localhost:5001 to kind-registry:5000. The
+# kind-registry Service at the end makes that name resolve in ate-system.
+#
+# Single node only: pods on another node would find no registry at their
+# localhost:5001.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ax-registry
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: ax-registry
+  labels:
+    app.kubernetes.io/name: ax-registry
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ax-registry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ax-registry
+    spec:
+      hostNetwork: true
+      containers:
+        - name: registry
+          image: registry:3
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: "0.0.0.0:5001"
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 5001
+              name: registry
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5001
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+      volumes:
+        # Survives pod restarts and cluster stop/start, so images need not be
+        # rebuilt. Deleting the cluster deletes it.
+        - name: data
+          hostPath:
+            path: /var/lib/ax-registry
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: ax-registry
+spec:
+  selector:
+    app.kubernetes.io/name: ax-registry
+  ports:
+    - port: 5000
+      targetPort: 5001
+      name: registry
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ate-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kind-registry
+  namespace: ate-system
+spec:
+  type: ExternalName
+  externalName: registry.ax-registry.svc.cluster.local
+  ports:
+    - port: 5000
+      name: registry

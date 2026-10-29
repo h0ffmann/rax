@@ -47,6 +47,24 @@ AX_STORE=postgres://rax@localhost:5432/rax cargo run -p rax-server
 
 `curl localhost:8080/healthz` answers `ok`.
 
+## Running on a local cluster
+
+`just` recipes bring up AX on a single-node minikube or MicroK8s cluster,
+with Agent Substrate, AX's task-runner and `rax-server` all built from
+source and deployed with AX's own manifests:
+
+```sh
+just minikube     # install minikube, create the cluster, deploy
+just microk8s     # the same on MicroK8s (Linux)
+just ax minikube get tasks
+```
+
+See [docs/local-kubernetes.md](docs/local-kubernetes.md) for the steps,
+the settings, and the limitations: the CLI, task-runner and E2E suite are
+still AX's Go code, Substrate needs pod-certificate feature gates, and only
+single-node clusters with gVisor sandboxes are supported. The setup has not
+been run end to end yet.
+
 The server reconciles tasks on Agent Substrate. Inside the cluster the
 defaults find it (`api.ate-system.svc.cluster.local:443`, with the mounted
 service account token and trust bundle). Elsewhere, point it at Substrate
@@ -83,7 +101,7 @@ non-test Go, 3,857 of 7,597 lines (51%) have a Rust counterpart.
 | `internal/metadata` | In-container metadata server: `/healthz`, `/readyz?check=workspace`, `/metadata` task and workspace | none | not started (step 4) |
 | `internal/workspace` | Workspace setup on first run: git clones with retry, files, skills, marker files | none | not started (step 4) |
 | `internal/model` | Gemini client built from a Model resource (API key from secret or store) | none | not started (step 4) |
-| `Dockerfile.*`, `deploy/`, `hack/`, `test/e2e` | Images, Kubernetes manifests, kind-based end-to-end tests | none | not started (step 4) |
+| `Dockerfile.*`, `deploy/`, `hack/`, `test/e2e` | Images, Kubernetes manifests, kind-based end-to-end tests | `Dockerfile.server`, `hack/local` | partial: a `rax-server` image and a minikube/MicroK8s setup that reuses AX's manifests and runs AX's suite; no task-runner image, no kind setup of its own |
 
 Because the task-runner is missing, a task that RAX provisions runs AX's
 `ax-task-runner` image (the default `--default-task-image`). The API,
@@ -107,14 +125,14 @@ against `rax-server`. That has not been tested yet.
 
 ### What is tested
 
-97 tests, all run in CI (`cargo test --all`, with a PostgreSQL 16 service).
+98 tests, all run in CI (`cargo test --all`, with a PostgreSQL 16 service).
 They port the Go tests for the packages above and add some of their own.
 
 | Suite | Tests | Covers |
 |---|---|---|
 | `rax-api` unit | 21 | YAML round trips and strict decoding (unknown fields rejected), lenient decoding, Workspace MCP and Model secret-key spellings, task config, workspace binding, name/meta/task/file validation, resource validation, CPU and memory parsing |
 | `rax-store` unit | 11 | One conformance suite run on both the memory and the PostgreSQL store (CRUD, defaults, paging, not-found), concurrent schema creation, records with unknown fields, lock serialization, cancellation, lease renewal and takeover of expired leases, URL redaction |
-| `rax-server` unit | 7 | Actor state to task phase and Ready, stored status keeps only AX's fields, `/healthz`, template naming and digest, the template name pattern, worker and router addresses |
+| `rax-server` unit | 8 | Actor state to task phase and Ready, stored status keeps only AX's fields, `/healthz`, template naming and digest, the template name pattern, worker and router addresses, Go-style `:port` listen addresses |
 | `rax-server` `tests/service.rs` | 15 | gRPC round trip over the real router, invalid names, workspace binding, reconcile lifecycle, delete (terminating, cleanup failure, status write failure), suspend success and failure, actor state read from Substrate, new tasks start suspended, failed and transiently failed provisioning, creation time kept, concurrent creates serialized |
 | `rax-server` `tests/controller.rs` | 17 | Ports of AX's reconciler tests against an in-memory Substrate: actor named after the task, worker IP, default image, suspend and failed suspend, rejected template (bare Substrate message, no fallback), transient template failure, workspace readiness polled directly and through the router and kept across suspend and resume, no new template on status changes, resource limits and their failure paths, delete removes only the task's templates, waits for the actor, times out, transient failures and recovery; plus a full create, resume, get, suspend and delete through the service |
 | `rax-substrate` unit | 12 | Retry and backoff rules, transient errors, template building, snapshot location, resource limits, TLS config, HTTP readiness probe |
@@ -122,14 +140,17 @@ They port the Go tests for the packages above and add some of their own.
 | `rax-substrate` `tests/tls.rs` | 1 | A real TLS connection: CA file, authority override, wrong server name rejected, unreadable CA, skip-verify |
 
 Not tested yet: against a real Agent Substrate (only the in-memory one), an
-AX and a RAX server sharing one database, and AX's kind-based end-to-end
-suite (`test/e2e`), which needs the CLI and task-runner from step 4.
+AX and a RAX server sharing one database, and AX's end-to-end suite
+(`test/e2e`). `just e2e <distro>` runs that suite, with AX's CLI and
+task-runner, against `rax-server` on a local cluster
+([docs/local-kubernetes.md](docs/local-kubernetes.md)), but it has not been
+run yet.
 
 ## Development
 
 ```sh
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test                                   # or: just test
+cargo clippy --all-targets -- -D warnings    # or: just lint
 cargo fmt --all --check
 ```
 

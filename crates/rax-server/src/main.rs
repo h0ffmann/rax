@@ -15,7 +15,7 @@ use rax_substrate::ClientOptions;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Listen address.
+    /// Listen address. Like Go, `:8080` listens on every interface.
     #[arg(long, env = "ADDR", default_value = "0.0.0.0:8080")]
     addr: String,
 
@@ -141,13 +141,22 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     }
     let service = AxService::new(store, opts);
 
-    let listener = tokio::net::TcpListener::bind(&args.addr).await?;
+    let listener = tokio::net::TcpListener::bind(listen_addr(&args.addr)).await?;
     tracing::info!(addr = %listener.local_addr()?, "starting rax-server");
     axum::serve(listener, router(service))
         .with_graceful_shutdown(shutdown())
         .await?;
     tracing::info!("shut down rax-server");
     Ok(())
+}
+
+/// Accepts Go's host-less `:port` form, which AX's manifests pass as
+/// `--addr=:8080`, as well as anything `TcpListener::bind` takes.
+fn listen_addr(addr: &str) -> String {
+    match addr.strip_prefix(':') {
+        Some(port) => format!("0.0.0.0:{port}"),
+        None => addr.to_string(),
+    }
 }
 
 async fn shutdown() {
@@ -163,4 +172,16 @@ async fn shutdown() {
     }
     #[cfg(not(unix))]
     let _ = ctrl_c.await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::listen_addr;
+
+    #[test]
+    fn listen_addr_accepts_go_port_form() {
+        assert_eq!(listen_addr(":8080"), "0.0.0.0:8080");
+        assert_eq!(listen_addr("127.0.0.1:8080"), "127.0.0.1:8080");
+        assert_eq!(listen_addr("[::]:8080"), "[::]:8080");
+    }
 }

@@ -1,0 +1,63 @@
+# Recipes for developing RAX and running AX on a local cluster.
+# `just` lists them. The local-cluster recipes take a distribution,
+# `minikube` or `microk8s`; see docs/local-kubernetes.md.
+
+local := justfile_directory() / "hack/local/local.sh"
+
+# List the recipes.
+default:
+    @just --list
+
+# Run the unit and integration tests.
+test:
+    cargo test --all
+
+# Run clippy and check formatting, as CI does.
+lint:
+    cargo fmt --all --check
+    cargo clippy --all-targets -- -D warnings
+
+# Build the rax-server image (the one `deploy` pushes to the local cluster).
+image tag="rax-server:local":
+    docker build -f Dockerfile.server -t {{tag}} .
+
+# Install a light Kubernetes distribution (minikube or microk8s) and kubectl.
+install distro:
+    {{local}} install {{distro}}
+
+# Create (minikube) or configure (microk8s) a single-node cluster with the feature gates Substrate needs.
+up distro:
+    {{local}} up {{distro}}
+
+# Build Substrate, AX's task-runner and the control plane from source and deploy them; re-run after changing code. SERVER=ax deploys AX's Go server instead of rax-server.
+deploy distro:
+    {{local}} deploy {{distro}}
+
+# Install, create and deploy in one go.
+all distro: (install distro) (up distro) (deploy distro)
+
+# Show the Substrate, AX and registry workloads.
+status distro:
+    {{local}} status {{distro}}
+
+# Run the ax CLI against the cluster, e.g. `just ax minikube get tasks`.
+ax distro *args:
+    {{local}} ax {{distro}} {{args}}
+
+# Run AX's end-to-end suite against the cluster, e.g. `just e2e minikube -test.run TestE2E_ModelCRUD`.
+e2e distro *args:
+    {{local}} e2e {{distro}} {{args}}
+
+# Delete the minikube cluster, or remove AX and Substrate from MicroK8s.
+down distro:
+    {{local}} down {{distro}}
+
+# Remove MicroK8s entirely (snap remove --purge); for minikube, the same as down.
+uninstall distro:
+    {{local}} uninstall {{distro}}
+
+# Shortcut: minikube from scratch.
+minikube: (all "minikube")
+
+# Shortcut: MicroK8s from scratch.
+microk8s: (all "microk8s")

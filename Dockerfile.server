@@ -1,0 +1,18 @@
+# rax-server image, built from this checkout. It is a drop-in replacement for
+# AX's ax-server image: same flags, same port, same /healthz.
+#
+#   docker build -f Dockerfile.server -t rax-server .
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked -p rax-server && \
+    cp target/release/rax-server /rax-server
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=build /rax-server /usr/local/bin/rax-server
+ENTRYPOINT ["/usr/local/bin/rax-server"]
