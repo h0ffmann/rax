@@ -73,3 +73,9 @@ minikube: (all "minikube")
 
 # Shortcut: MicroK8s from scratch.
 microk8s: (all "microk8s")
+
+# Write the README drawing (docs/drawings/cosmos.svg and its Desmos state) from drawings/*.nix.
+drawing:
+    art=$(nix build .#cosmos-art --no-link --print-out-paths) && \
+    cat "$art/cosmos.svg" > docs/drawings/cosmos.svg && \
+    cat "$art/cosmos.desmos.json" > docs/drawings/cosmos.desmos.json

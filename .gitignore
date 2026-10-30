@@ -25,3 +25,6 @@ rustc-ice-*.txt
 
 # Local clusters (hack/local): kubeconfigs, checkouts, binaries
 .tmp/
+
+# nix build
+result

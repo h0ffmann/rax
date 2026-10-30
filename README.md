@@ -1,5 +1,11 @@
 # rax
 
+<p align="center">
+<img alt="代理 (dairi, an agent: one who acts in another's place) brushed in its sixteen strokes, among stars, inside an orbit" src="docs/drawings/cosmos.svg" width="520"/>
+<br/>
+<sub>代理 · <i>dairi</i> · one who acts in another's place · <a href="docs/drawings/README.md">the drawing</a></sub>
+</p>
+
 Rustic Agentic Runtime: a pure-Rust port of [AX](https://github.com/google/ax),
 the declarative orchestrator for running agentic tasks on
 [Agent Substrate](https://github.com/agent-substrate/substrate).
@@ -219,7 +225,13 @@ cargo fmt --all --check
 The PostgreSQL tests run when `RAX_TEST_POSTGRES_URL` points at a database
 they may wipe, for example `postgres://rax@localhost:5432/rax_test`.
 
+The README drawing is pure Nix (`drawings/`, see [docs/drawings](docs/drawings/README.md)):
+`just drawing` writes it again, and `nix flake check` checks it.
+
 ## License
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE). Parts derived from AX keep their
-Apache 2.0 license ([LICENSE-APACHE](LICENSE-APACHE)).
+Apache 2.0 license ([LICENSE-APACHE](LICENSE-APACHE)). The drawing and its pen
+(`drawings/pen.nix`, from piabrota/nix-os, ported there from
+[pirsig](https://github.com/h0ffmann/pirsig)'s Rust pen) are under the same
+MPL-2.0 as the rest of RAX.
