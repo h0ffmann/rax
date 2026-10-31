@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use rax_server::controller::{ControllerOptions, SubstrateActors, TaskReconciler};
+use rax_server::pods::{KubeClient, PodOptions, PodRunner};
 use rax_server::{AxService, ServerOptions, router};
 use rax_store::{
     Locker, MemoryLocker, MemoryStore, PostgresOptions, PostgresStore, Store, describe_url,
@@ -66,6 +67,31 @@ struct Args {
     /// Container image for tasks that do not set spec.image.
     #[arg(long, env = "AX_DEFAULT_TASK_IMAGE", default_value = rax_api::DEFAULT_TASK_IMAGE)]
     default_task_image: String,
+
+    /// Where tasks run: `substrate` (AX's actors on Agent Substrate) or `pod`
+    /// (one Kubernetes pod per run, in --pod-namespace, for clusters without
+    /// Substrate).
+    #[arg(long, env = "RAX_RUNNER", default_value = "substrate", value_parser = ["substrate", "pod"])]
+    runner: String,
+
+    /// The namespace task pods run in (`--runner=pod`).
+    #[arg(long, default_value = "ax-tasks")]
+    pod_namespace: String,
+
+    /// A Secret in --pod-namespace whose keys become every task pod's
+    /// environment. Repeat for more. Tasks cannot name Secrets themselves.
+    #[arg(long = "pod-env-from-secret")]
+    pod_env_from_secrets: Vec<String>,
+
+    /// The task pods' service account. Empty mounts no token.
+    #[arg(long, default_value = "")]
+    pod_service_account: String,
+
+    /// Limits for task pods that set none.
+    #[arg(long, default_value = "500m")]
+    pod_cpu_limit: String,
+    #[arg(long, default_value = "256Mi")]
+    pod_memory_limit: String,
 }
 
 #[tokio::main]
@@ -101,6 +127,32 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         (pg.clone(), pg)
     };
 
+    let mut opts = ServerOptions {
+        locker: Some(locker),
+        ..Default::default()
+    };
+    if args.runner == "pod" {
+        tracing::info!(
+            namespace = args.pod_namespace,
+            default_task_image = args.default_task_image,
+            "running tasks as pods"
+        );
+        let runner = Arc::new(PodRunner::new(
+            KubeClient::in_cluster().map_err(|e| format!("the Kubernetes API: {e}"))?,
+            PodOptions {
+                namespace: args.pod_namespace,
+                default_task_image: args.default_task_image,
+                env_from_secrets: args.pod_env_from_secrets,
+                service_account: args.pod_service_account,
+                default_cpu_limit: args.pod_cpu_limit,
+                default_memory_limit: args.pod_memory_limit,
+            },
+        ));
+        opts.reconciler = Some(runner.clone());
+        opts.actors = Some(runner);
+        return serve(&args.addr, AxService::new(store, opts)).await;
+    }
+
     tracing::info!(
         substrate_endpoint = args.substrate_endpoint,
         template = args.template,
@@ -115,10 +167,6 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         insecure_tls: args.substrate_insecure_tls,
         plaintext: args.substrate_plaintext,
     });
-    let mut opts = ServerOptions {
-        locker: Some(locker),
-        ..Default::default()
-    };
     match client {
         Ok(client) => {
             let reconciler = TaskReconciler::new(
@@ -139,9 +187,11 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             "could not initialize substrate client; running without substrate reconciliation"
         ),
     }
-    let service = AxService::new(store, opts);
+    serve(&args.addr, AxService::new(store, opts)).await
+}
 
-    let listener = tokio::net::TcpListener::bind(listen_addr(&args.addr)).await?;
+async fn serve(addr: &str, service: AxService) -> Result<(), Box<dyn std::error::Error>> {
+    let listener = tokio::net::TcpListener::bind(listen_addr(addr)).await?;
     tracing::info!(addr = %listener.local_addr()?, "starting rax-server");
     axum::serve(listener, router(service))
         .with_graceful_shutdown(shutdown())

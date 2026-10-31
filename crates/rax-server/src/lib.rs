@@ -8,6 +8,7 @@
 
 pub mod controller;
 mod http;
+pub mod pods;
 mod service;
 mod tasks;
 
@@ -68,6 +69,12 @@ pub trait Actors: Send + Sync {
     /// Returns the actor, or `None` when it does not exist.
     async fn get_actor(&self, atespace: &str, name: &str) -> Result<Option<Actor>, Status>;
     async fn list_actors(&self, atespace: &str) -> Result<Vec<Actor>, Status>;
+    /// The actor to report for a task that has none. `None`, the default,
+    /// reports the task as failed: on Substrate a provisioned task always has
+    /// an actor.
+    fn absent_actor(&self, _name: &str) -> Option<Actor> {
+        None
+    }
 }
 
 /// Coordinates sandbox and actor lifecycles on Agent Substrate.

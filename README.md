@@ -117,6 +117,43 @@ A published `rax-server` image (linux/amd64) is at
 sources publishes `main` and `sha-<commit>` from `Dockerfile.server`
 (`.github/workflows/image.yml`, whose run summary prints the digest to pin).
 
+## Running without Substrate: the pod runner
+
+`rax-server --runner=pod` runs tasks as plain Kubernetes pods instead of
+actors on Agent Substrate, for clusters that cannot host Substrate (a small
+single node, no gVisor). It is RAX's own mode, not AX's: there is no sandbox,
+snapshot, workspace setup or `ssh`. Each resume runs the task once, in a new
+pod in one namespace:
+
+| Task | Pod |
+|---|---|
+| created, or suspended | no pod running; a running one is deleted |
+| resumed | a new pod; the task's older pods are deleted first |
+| `Running`, `Resuming` | the pod is `Running`, `Pending` |
+| `Suspended` | the pod exited 0, or there is none |
+| `Failed` | the pod exited non-zero or cannot start (its image, a root user); the Ready condition says why |
+| deleted | its pods are deleted |
+
+A finished pod stays until the next resume, so `kubectl logs` reads its
+output. The pod gets the task's `spec.env`, `AX_TASK_NAME`,
+`AX_TASK_ATESPACE` and `AX_TASK_YAML`; its limits, with requests equal to
+them, from `spec.resources.limits` or the server's defaults; `restartPolicy:
+Never`; no privilege escalation, no capabilities, the runtime's seccomp
+profile, and `runAsNonRoot`, so task images set a non-root `USER`.
+
+| Flag | Default | |
+|---|---|---|
+| `--runner` (`RAX_RUNNER`) | `substrate` | `pod` for this mode |
+| `--pod-namespace` | `ax-tasks` | where task pods run |
+| `--pod-env-from-secret` | none | a Secret in that namespace whose keys become every task's environment; repeat for more. Tasks cannot name Secrets themselves |
+| `--pod-service-account` | none | the pods' service account; without one, no token is mounted |
+| `--pod-cpu-limit`, `--pod-memory-limit` | `500m`, `256Mi` | limits for tasks that set none |
+
+The server talks to the API as its own pod's service account, which needs
+`get`, `list`, `create` and `delete` on `pods` in that namespace. A
+`ResourceQuota` there bounds how many tasks run at once: a create the quota
+refuses leaves the task `Pending`, to retry.
+
 ## Parity with AX
 
 **RAX covers everything AX ships**: the control plane (`ax-server`), the
