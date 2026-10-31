@@ -112,6 +112,11 @@ after it and a per-task actor template named `<task>-tmpl-<digest>`.
 Setting `ATENET_ROUTER_ADDR` also probes workspace readiness through the
 router.
 
+A published `rax-server` image (linux/amd64) is at
+`ghcr.io/piabrota/rax-server`: every push to `main` that changes the server's
+sources publishes `main` and `sha-<commit>` from `Dockerfile.server`
+(`.github/workflows/image.yml`, whose run summary prints the digest to pin).
+
 ## Parity with AX
 
 **RAX covers everything AX ships**: the control plane (`ax-server`), the
