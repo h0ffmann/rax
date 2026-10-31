@@ -70,7 +70,8 @@ impl Tasks {
                     let by_name: HashMap<_, _> =
                         list.iter().map(|a| (a.name.as_str(), a)).collect();
                     for t in group {
-                        let a = by_name.get(task_name(t)).copied();
+                        let absent = actors.absent_actor(task_name(t));
+                        let a = by_name.get(task_name(t)).copied().or(absent.as_ref());
                         set_actor_status(t, Ok(a));
                     }
                 }
@@ -133,7 +134,11 @@ impl Tasks {
             .as_ref()
             .map(|m| m.atespace.clone())
             .unwrap_or_default();
-        let res = actors.get_actor(&atespace, task_name(task)).await;
+        let name = task_name(task).to_owned();
+        let res = actors
+            .get_actor(&atespace, &name)
+            .await
+            .map(|a| a.or_else(|| actors.absent_actor(&name)));
         set_actor_status(task, res.as_ref().map(|a| a.as_ref()));
     }
 }
