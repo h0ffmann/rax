@@ -116,6 +116,8 @@ A published `rax-server` image (linux/amd64) is at
 `ghcr.io/piabrota/rax-server`: every push to `main` that changes the server's
 sources publishes `main` and `sha-<commit>` from `Dockerfile.server`
 (`.github/workflows/image.yml`, whose run summary prints the digest to pin).
+The image also has the `rax` CLI, for Jobs and CronJobs that apply and resume
+tasks in the cluster: `command: [rax, --server, ax-server.ax-system:8080, ...]`.
 
 ## Running without Substrate: the pod runner
 
